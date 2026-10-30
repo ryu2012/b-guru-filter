@@ -33,7 +33,7 @@ function addWord() {
   if (!word) return;
 
   chrome.storage.sync.get({ ngWords: [] }, (data) => {
-    const words = data.ngWords;
+    const words = data.ngWords || [];
     if (!words.includes(word)) {
       words.push(word);
       chrome.storage.sync.set({ ngWords: words }, () => {
@@ -46,7 +46,7 @@ function addWord() {
 
 function removeWord(index) {
   chrome.storage.sync.get({ ngWords: [] }, (data) => {
-    const words = data.ngWords;
+    const words = data.ngWords || [];
     words.splice(index, 1);
     chrome.storage.sync.set({ ngWords: words }, () => renderList(words));
   });

@@ -1,37 +1,65 @@
 let ngWords = [];
 
+// 強制非表示用のCSSをDOMに注入
+const style = document.createElement("style");
+style.id = "bguru-filter-style";
+style.textContent = `
+  div[data-post-id][data-bguru-hidden="true"],
+  [data-bguru-hidden="true"] {
+    display: none !important;
+  }
+`;
+document.head.appendChild(style);
+
+// 文字列を正規化して小文字化
+function normalizeText(text) {
+  if (!text) return "";
+  return text.normalize("NFKC").toLowerCase().trim();
+}
+
 // ストレージからNGワードを読み込み
 chrome.storage.sync.get({ ngWords: [] }, (data) => {
-  ngWords = data.ngWords;
+  ngWords = (data.ngWords || []).map((w) => normalizeText(w)).filter(Boolean);
+  console.log("[B-guru Filter] 読み込まれたNGワード:", ngWords);
   filterAllPosts();
 });
 
 // ポップアップ側でNGワードが変更されたら即座に再判定
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync" && changes.ngWords) {
-    ngWords = changes.ngWords.newValue || [];
+    ngWords = (changes.ngWords.newValue || [])
+      .map((w) => normalizeText(w))
+      .filter(Boolean);
+    console.log("[B-guru Filter] NGワードが更新されました:", ngWords);
     filterAllPosts();
   }
 });
 
-// 1つのポスト（[data-post-id]）を検査してフィルタリング
+// 1つのポスト（[data-post-id]）を検査
 function filterPost(postEl) {
   if (!postEl) return;
 
-  // 投稿全体のテキスト（本文 .post-body だけでなくOGPカードのタイトル等も含む）を取得
-  const text = (postEl.innerText || "").toLowerCase();
+  // content-visibility: auto の影響を受けないよう textContent を使用
+  const rawText = postEl.textContent || "";
+  const normalized = normalizeText(rawText);
 
-  // NGワードに一致するかチェック（大文字小文字を区別せず部分一致）
-  const isBlocked = ngWords.some(
-    (word) => word && text.includes(word.toLowerCase())
-  );
+  if (!normalized) return;
 
-  if (isBlocked) {
-    postEl.style.display = "none";
+  // NGワードに一致するかチェック
+  const matchedWord = ngWords.find((word) => normalized.includes(word));
+
+  if (matchedWord) {
+    if (!postEl.hasAttribute("data-bguru-hidden")) {
+      const postId = postEl.getAttribute("data-post-id") || "unknown";
+      console.log(
+        `[B-guru Filter] ポスト (ID: ${postId}) を非表示にしました。ヒットしたワード: "${matchedWord}"`
+      );
+    }
+    postEl.setAttribute("data-bguru-hidden", "true");
   } else {
-    // NGワードを削除した際に元に戻せるようにする
-    if (postEl.style.display === "none") {
-      postEl.style.display = "";
+    // NGワードを削除した場合は表示を復元
+    if (postEl.hasAttribute("data-bguru-hidden")) {
+      postEl.removeAttribute("data-bguru-hidden");
     }
   }
 }
@@ -42,7 +70,7 @@ function filterAllPosts() {
   posts.forEach(filterPost);
 }
 
-// スクロールや自動更新で新しく追加されるポストを監視
+// スクロールや仮想DOMによるDOMノードの追加を監視
 const observer = new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     mutation.addedNodes.forEach((node) => {
@@ -59,3 +87,6 @@ const observer = new MutationObserver((mutations) => {
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+
+// Reactの仮想DOM再マウント・スクロール対策として定期再スキャンも実施（1秒間隔）
+setInterval(filterAllPosts, 1000);
