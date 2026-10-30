@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "B-guru Filter",
+  "version": "1.0.0",
+  "description": "bsm.backspace.fm (B-guru) で特定ワードを含むポストを非表示にするChrome拡張機能",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://bsm.backspace.fm/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://bsm.backspace.fm/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
